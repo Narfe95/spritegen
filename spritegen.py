@@ -5,10 +5,13 @@ from typing import Tuple
 import ffmpeg
 
 
+VIDEO_FORMATS = ["mp4", "webm"]
+
+
 class SpriteGen:
 
-    def __init__(self, input_video: str):
-        self.input_video = input_video
+    def __init__(self, video_file: str):
+        self.video_file = video_file
 
     def _get_framecount(self) -> Tuple[int, float]:
         """
@@ -17,7 +20,7 @@ class SpriteGen:
         Returns:
             int: Total number of frames in the video.
         """
-        probe = ffmpeg.probe(self.input_video)
+        probe = ffmpeg.probe(os.path.join("input", self.video_file))
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if not video_stream or 'nb_frames' not in video_stream:
             raise ValueError("Could not retrieve frame count from video.")
@@ -44,11 +47,11 @@ class SpriteGen:
         rows = math.ceil(frames / cols)
         new_frame_rate = round(frames / duration)
 
-        output_name = self._output_name(framerate=new_frame_rate, rows=rows, cols=cols)
+        output_name = os.path.join("output", self._output_name(framerate=new_frame_rate, rows=rows, cols=cols))
 
         # Generate sprite sheet
         try:
-            (ffmpeg.input(self.input_video).
+            (ffmpeg.input(os.path.join("input", self.video_file)).
              filter("fps", fps=f"{new_frame_rate}").
              filter("scale", frame_size, frame_size).
              filter("tile", f"{cols}x{rows}").
@@ -58,7 +61,7 @@ class SpriteGen:
             print(f"Error generating sprite sheet: {str(e)}")
 
     def _output_name(self, framerate: float, rows: int, cols: int) -> str:
-        basename = self.input_video.rsplit(".")[0]
+        basename = self.video_file.rsplit(".")[0]
         framesize = rows * cols
         return f"{basename}_{framerate}fps_{framesize}.png"
 
@@ -80,9 +83,16 @@ def calculate_quality(total_frames):
 
 # Example usage
 if __name__ == "__main__":
-    input_video = "tomska_santa_no_witnesses.mp4"
+    if not os.path.exists("output"):
+        os.mkdir("output")
 
-    if not os.path.exists(input_video):
-        print(f"Error: Input video file '{input_video}' not found.")
-    else:
-        SpriteGen(input_video).generate_spritesheet()
+    if not os.path.exists("input"):
+        raise Exception("Input directory does not exist.")
+
+    for file in os.listdir("input"):
+        if file.rsplit(".")[1] not in VIDEO_FORMATS:
+            continue
+        try:
+            SpriteGen(video_file=file).generate_spritesheet()
+        except ValueError as value_error:
+            print(str(value_error))
